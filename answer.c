@@ -83,12 +83,9 @@ void *writer_thread(void *arg) {
 	//TODO: Define set-up required
 	printf("Writer\n");
 	Buffer_t* b = (Buffer_t *)arg;
-	
-	while(1) {
+
+	for(int iter = 0; iter < MAX_WRITER_VALUES; ++iter) {
 		unsigned int value = get_external_data(NULL, 1);
-		if(value >= 100) {
-			break;
-		}
 		buffer_insert(b, value);
 	}
 	
@@ -139,10 +136,10 @@ int main(int argc, char **argv) {
 	}
 
 	// perform once all threads finish executing
-	// sem_destroy(&b.full);
-	// sem_destroy(&b.empty);
-	// sem_destroy(&b.insert_lock);
-	// sem_destroy(&b.remove_lock);
+	sem_destroy(&b.full);
+	sem_destroy(&b.empty);
+	sem_destroy(&b.insert_lock);
+	sem_destroy(&b.remove_lock);
 
 	return 0;	
 }

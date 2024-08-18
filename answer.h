@@ -13,6 +13,8 @@
 
 #define BUFFER_SIZE 1024
 
+#define MAX_WRITER_VALUES 10
+
 typedef struct Buffer {
     // uint16 -> max buffer size is 65536
     uint16_t head;
