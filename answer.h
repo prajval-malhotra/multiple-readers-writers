@@ -19,10 +19,13 @@ typedef struct Buffer {
     uint16_t tail;
     unsigned int buffer[BUFFER_SIZE];
 
-    // returns -1 on errors
-    int (*buffer_insert)(struct Buffer* b, unsigned int value);
-    // returns -1 on errors
-    int (*buffer_remove)(struct Buffer* b, unsigned int value);
+    sem_t empty;
+    sem_t full;
+    sem_t insert_lock;
+    sem_t remove_lock;
+
+    void (*buffer_insert)(struct Buffer* b, unsigned int value);
+    void (*buffer_remove)(struct Buffer* b, unsigned int value);
 
 } Buffer_t;
 
