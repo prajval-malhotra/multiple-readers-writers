@@ -29,8 +29,8 @@
 
 typedef struct Buffer {
     // uint16 -> max buffer size is 65536
-    uint16_t head;
-    uint16_t tail;
+    uint32_t head;
+    uint32_t tail;
     char buffer[BUFFER_SIZE];
 
     sem_t empty;

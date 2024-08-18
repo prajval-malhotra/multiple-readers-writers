@@ -9,13 +9,15 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 
 	static char ch = 'A';
 
-	// generate differing sizes of buffers
-	if((rand() % 10) > BUFFER_SIZE_SKEW) { // generate buffer in small range
-		bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
-	}
-	else {
-		bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
-	}
+	// // generate differing sizes of buffers
+	// if((rand() % 10) > BUFFER_SIZE_SKEW) { // generate buffer in small range
+	// 	bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
+	// }
+	// else {
+	// 	bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
+	// }
+
+	bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
 
 	// our data is chars in range ['A' - 'z']. Loop around when 'z' reached.
 	memset(buffer, ch, sizeof(char) * bufferSizeInBytes);
@@ -41,9 +43,17 @@ void buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 	// make sure only one thread can write to a spot
 	sem_wait(&b->insert_lock);
 	
-	memcpy(&b->buffer[b->tail], insertBuf, insertBufSize);
-	b->tail = (b->tail + 1) % BUFFER_SIZE;
-	printf("Inserted %ld %c bytes.\n", insertBufSize, insertBuf[0]);
+	unsigned int temp_insert_pos = b->tail;
+	if((b->tail + insertBufSize) < BUFFER_SIZE) {
+		memcpy(&b->buffer[b->tail], insertBuf, insertBufSize);	
+	} else {
+		int remaining_space = BUFFER_SIZE - b->tail - 1;
+		memcpy(&b->buffer[b->tail], insertBuf, remaining_space);
+		memcpy(&b->buffer[0], insertBuf + remaining_space, insertBufSize - remaining_space);
+	}
+	// memcpy(&b->buffer[b->tail], insertBuf, insertBufSize); /// what happens whnen our index wraps around? chaos.
+	b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
+	printf("Inserted %ld %c bytes at index %d. New tail: %d\n", insertBufSize, insertBuf[0], temp_insert_pos, b->tail);
 	insert_counter += insertBufSize;
 	
 	sem_post(&b->insert_lock);
@@ -68,7 +78,7 @@ void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 	// memcpy(removeBuf, &b->buffer[b->head], removeBufSize);
 	*removeBuf = b->buffer[b->head]; // remove signle byte from shared buffer
 	b->head = (b->head + 1) % BUFFER_SIZE;
-	printf("Removed 1 byte. Total bytes removed: %d\n", remove_counter);
+	printf("Removed 1 byte at index %d. Total bytes removed: %d\n", b->head, remove_counter);
 	remove_counter++;
 	
 	sem_post(&b->remove_lock);
@@ -88,8 +98,6 @@ void *reader_thread(void *arg) {
 	Buffer_t* b = (Buffer_t *)arg;
 	
 	while(1) {
-		unsigned int value = 0;
-		// buffer_remove(b, &value);
 		char read_buffer;
 		int data_size = 0;
 		buffer_remove(b, &read_buffer, data_size);
@@ -122,6 +130,8 @@ void *writer_thread(void *arg) {
 			buffer_insert(b, write_buffer, data_size);
 		}
 	}
+
+	free(write_buffer);
 	
 	return NULL;
 }
