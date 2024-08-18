@@ -1,7 +1,7 @@
 ########## Variables ##########
 
 CXX = gcc					# compiler
-CXXFLAGS = -g -Wall -MMD			# compiler flags
+CXXFLAGS = -Wall -MMD			# compiler flags
 MAKEFILE_NAME = ${firstword ${MAKEFILE_LIST}}	
 
 OBJECTS = answer.o			
