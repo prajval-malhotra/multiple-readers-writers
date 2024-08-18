@@ -1,10 +1,28 @@
 #include "answer.h"
 
+static int insert_counter = 0;
+static int remove_counter = 0;
 
+// expect buffer to be malloced?
 int get_external_data(char *buffer, int bufferSizeInBytes) {
-	static int i = 0;
+	// static int i = 0;
 
-	return i++;
+	static char ch = 'A';
+
+	// generate differing sizes of buffers
+	if((rand() % 10) > BUFFER_SIZE_SKEW) { // generate buffer in small range
+		bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
+	}
+	else {
+		bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
+	}
+
+	// our data is chars in range ['A' - 'z']. Loop around when 'z' reached.
+	memset(buffer, ch, sizeof(char) * bufferSizeInBytes);
+	ch = (ch < 'z') ? ch + 1 : 'A';
+
+	return bufferSizeInBytes;
+
 }
 
 void process_data(char *buffer, int bufferSizeInBytes) {
@@ -16,15 +34,18 @@ void process_data(char *buffer, int bufferSizeInBytes) {
  * Insert value arg2 into shared buffer pointed to by arg1
  * Return value < 0 on errors
  */
-void buffer_insert(struct Buffer* b, unsigned int value) {
+void buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 
 	sem_wait(&b->empty); // wait for a slot to empty up
 
 	// make sure only one thread can write to a spot
 	sem_wait(&b->insert_lock);
-	b->buffer[b->tail] = value;
+	
+	memcpy(&b->buffer[b->tail], insertBuf, insertBufSize);
 	b->tail = (b->tail + 1) % BUFFER_SIZE;
-	printf("Inserted %d\n", value);
+	printf("Inserted %ld %c bytes.\n", insertBufSize, insertBuf[0]);
+	insert_counter += insertBufSize;
+	
 	sem_post(&b->insert_lock);
 	
 	sem_post(&b->full); // indicate a full spot, ready to be read
@@ -36,16 +57,20 @@ void buffer_insert(struct Buffer* b, unsigned int value) {
  * Value removed is arg2
  * Return value < 0 on errors
  */
-void buffer_remove(struct Buffer* b, unsigned int* value) {
+void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 
 	// wait for a full spot
 	sem_wait(&b->full);
 
 	// ensure only one thread reads the value
 	sem_wait(&b->remove_lock);
-	*value = b->buffer[b->head];
+	
+	// memcpy(removeBuf, &b->buffer[b->head], removeBufSize);
+	*removeBuf = b->buffer[b->head]; // remove signle byte from shared buffer
 	b->head = (b->head + 1) % BUFFER_SIZE;
-	printf("Removed %d\n", *value);
+	printf("Removed 1 byte. Total bytes removed: %d\n", remove_counter);
+	remove_counter++;
+	
 	sem_post(&b->remove_lock);
 
 	// indicate a freed up spot in the buffer
@@ -64,8 +89,12 @@ void *reader_thread(void *arg) {
 	
 	while(1) {
 		unsigned int value = 0;
-		buffer_remove(b, &value);
-		if(value == -1) {
+		// buffer_remove(b, &value);
+		char read_buffer;
+		int data_size = 0;
+		buffer_remove(b, &read_buffer, data_size);
+		if(read_buffer == '#') {
+			printf("Found sentinel value, exiting.\n");
 			break;
 		}
 	}
@@ -84,9 +113,14 @@ void *writer_thread(void *arg) {
 	printf("Writer\n");
 	Buffer_t* b = (Buffer_t *)arg;
 
+	// malloc max possible input value buffer
+	char *write_buffer = (char *)malloc(sizeof(char) * MAX_THREAD_BUFFER_SIZE);
+
 	for(int iter = 0; iter < MAX_WRITER_VALUES; ++iter) {
-		unsigned int value = get_external_data(NULL, 1);
-		buffer_insert(b, value);
+		unsigned int data_size = get_external_data(write_buffer, 0);
+		if(data_size > 0) {
+			buffer_insert(b, write_buffer, data_size);
+		}
 	}
 	
 	return NULL;
@@ -124,14 +158,19 @@ int main(int argc, char **argv) {
 			printf("Problem joining writer #%d\n", i);
 		}
 	}
+	printf("All writers exited. Total bytes inserted: %d\n", insert_counter);
 
+	char sentinel_buffer[NUM_READERS];
 	for(i = 0; i < NUM_READERS; ++i) {
-		buffer_insert(&b, -1);
+		sentinel_buffer[i] = '#';
 	}
+	buffer_insert(&b, sentinel_buffer, NUM_READERS);
 
 	for(i = 0; i < NUM_READERS; ++i) {
 		if(pthread_join(reader_thids[i], NULL)) {
 			printf("Problem joining reader #%d\n", i);
+		} else {
+			printf("%d readers exited\n", i);
 		}
 	}
 
