@@ -2,23 +2,27 @@
 #define _ANSWER_H_
 
 #include <stdio.h>   // printf()
-#include <stddef.h> 
+#include <stddef.h>
+#include <stdbool.h> 
 #include <string.h>  // memcpy()
 #include <stdlib.h>  // rand() 
 #include <time.h>    // srand(time()) 
 #include <stdint.h>
 #include <pthread.h>
+#include <sched.h>
 #include <semaphore.h>
 
 //TODO Define global data structures to be used
 #define NUM_WRITERS 10
 #define NUM_READERS 20
 
-#define BUFFER_SIZE 65536
+// #define BUFFER_SIZE 65536
+#define BUFFER_SIZE 16000
 
 // TODO: enforce boundaries
-#define MAX_THREAD_BUFFER_SIZE 16384 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
+#define MAX_THREAD_BUFFER_SIZE 8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
 
+// #define MAX_WRITER_VALUES 100
 #define MAX_WRITER_VALUES 100
 
 // random number generator config
@@ -26,7 +30,7 @@
 #define SMALL_BUFFER_LOWER 1
 #define SMALL_BUFFER_HIGHER 128
 #define BIG_BUFFER_LOWER 1024
-#define BIG_BUFFER_HIGHER 16384
+#define BIG_BUFFER_HIGHER 2048
 
 typedef struct Buffer {
     // uint16 -> max buffer size is 65536
@@ -38,10 +42,16 @@ typedef struct Buffer {
     sem_t full;
     sem_t insert_lock;
     sem_t remove_lock;
+    sem_t overwrite_lock;
 
     void (*buffer_insert)(struct Buffer* b, char* insertBuf, size_t insertBufSize);
     void (*buffer_remove)(struct Buffer* b, char *removeBuf, size_t removeBufSize);
 
 } Buffer_t;
+
+typedef enum OperationType {
+    HEAD = 0,
+    TAIL,
+} OperationType;
 
 #endif /* _ANSWER_H_ */

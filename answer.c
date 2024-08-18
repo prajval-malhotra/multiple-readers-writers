@@ -31,37 +31,38 @@ void process_data(char *buffer, int bufferSizeInBytes) {
 
 }
 
-
 /**
  * Insert value arg2 into shared buffer pointed to by arg1
  * Return value < 0 on errors
  */
-void buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
+int buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 
-	sem_wait(&b->empty); // wait for a slot to empty up
+	for(int i = 0; i < insertBufSize; ++i) { // only allow write when insertBufSize memory available - inefficient
+		sem_wait(&b->empty); // wait for a slot to empty up
+	}
 
 	// make sure only one thread can write to a spot
 	sem_wait(&b->insert_lock);
-	
+
 	unsigned int temp_insert_pos = b->tail;
 	if((b->tail + insertBufSize) < BUFFER_SIZE) {
 		memcpy(&b->buffer[b->tail], insertBuf, insertBufSize);	
 	} else {
-		int remaining_space = BUFFER_SIZE - b->tail - 1;
+		int remaining_space = BUFFER_SIZE - b->tail;
 		memcpy(&b->buffer[b->tail], insertBuf, remaining_space);
 		memcpy(&b->buffer[0], insertBuf + remaining_space, insertBufSize - remaining_space);
 	}
-	// memcpy(&b->buffer[b->tail], insertBuf, insertBufSize); /// what happens whnen our index wraps around? chaos.
 	b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
 	printf("Inserted %ld %c bytes at index %d. New tail: %d\n", insertBufSize, insertBuf[0], temp_insert_pos, b->tail);
 	insert_counter += insertBufSize;
 	
 	sem_post(&b->insert_lock);
 	
-	sem_post(&b->full); // indicate a full spot, ready to be read
-	// int semvalue = 0;
-	// sem_getvalue(&b->full, &semvalue);
-	// printf("---- Full value: %d\n", semvalue);
+	for(int i = 0; i < insertBufSize; ++i) {
+		sem_post(&b->full);  // indicate a full spot for every byte written, ready to be read
+	}
+
+	return insertBufSize;
 
 }
 
@@ -72,15 +73,12 @@ void buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
  */
 void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 
-	printf("waiting for full\n");
 	// wait for a full spot
 	sem_wait(&b->full);
 
-	printf("waiting for remove\n");
 	// ensure only one thread reads the value
 	sem_wait(&b->remove_lock);
-	
-	printf("In critical section\n");
+
 	// memcpy(removeBuf, &b->buffer[b->head], removeBufSize);
 	*removeBuf = b->buffer[b->head]; // remove signle byte from shared buffer
 	b->head = (b->head + 1) % BUFFER_SIZE;
@@ -107,7 +105,6 @@ void *reader_thread(void *arg) {
 		char read_buffer;
 		int data_size = 0;
 		buffer_remove(b, &read_buffer, data_size);
-		printf("Back in reader\n");
 		if(read_buffer == '#') {
 			printf("Found sentinel value, exiting.\n");
 			break;
@@ -145,15 +142,16 @@ void *writer_thread(void *arg) {
 
 
 int main(int argc, char **argv) {
-	srand(time(NULL));
+	srand(time(NULL)); // truly random values
 	int i;
 	Buffer_t b = { .head = 0, .tail = 0 }; // create shared buffer
 	
 	// initialize semaphores
-	sem_init(&b.full, 0, BUFFER_SIZE);
+	sem_init(&b.full, 0, 0);
 	sem_init(&b.empty, 0, BUFFER_SIZE);
 	sem_init(&b.insert_lock, 0, 1);
 	sem_init(&b.remove_lock, 0, 1);
+	sem_init(&b.overwrite_lock, 0, 0);
 
 	pthread_t reader_thids[NUM_READERS];
 	pthread_t writer_thids[NUM_WRITERS];
@@ -199,6 +197,7 @@ int main(int argc, char **argv) {
 	sem_destroy(&b.empty);
 	sem_destroy(&b.insert_lock);
 	sem_destroy(&b.remove_lock);
+	sem_destroy(&b.overwrite_lock);
 
 	return 0;	
 }
