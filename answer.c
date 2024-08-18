@@ -9,15 +9,15 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 
 	static char ch = 'A';
 
-	// // generate differing sizes of buffers
-	// if((rand() % 10) > BUFFER_SIZE_SKEW) { // generate buffer in small range
-	// 	bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
-	// }
-	// else {
-	// 	bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
-	// }
+	// generate differing sizes of buffers
+	if((rand() % 10) > BUFFER_SIZE_SKEW) { // generate buffer in small range
+		bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
+	}
+	else {
+		bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
+	}
 
-	bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
+	// bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
 
 	// our data is chars in range ['A' - 'z']. Loop around when 'z' reached.
 	memset(buffer, ch, sizeof(char) * bufferSizeInBytes);
@@ -59,6 +59,9 @@ void buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 	sem_post(&b->insert_lock);
 	
 	sem_post(&b->full); // indicate a full spot, ready to be read
+	// int semvalue = 0;
+	// sem_getvalue(&b->full, &semvalue);
+	// printf("---- Full value: %d\n", semvalue);
 
 }
 
@@ -69,12 +72,15 @@ void buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
  */
 void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 
+	printf("waiting for full\n");
 	// wait for a full spot
 	sem_wait(&b->full);
 
+	printf("waiting for remove\n");
 	// ensure only one thread reads the value
 	sem_wait(&b->remove_lock);
 	
+	printf("In critical section\n");
 	// memcpy(removeBuf, &b->buffer[b->head], removeBufSize);
 	*removeBuf = b->buffer[b->head]; // remove signle byte from shared buffer
 	b->head = (b->head + 1) % BUFFER_SIZE;
@@ -101,6 +107,7 @@ void *reader_thread(void *arg) {
 		char read_buffer;
 		int data_size = 0;
 		buffer_remove(b, &read_buffer, data_size);
+		printf("Back in reader\n");
 		if(read_buffer == '#') {
 			printf("Found sentinel value, exiting.\n");
 			break;
@@ -138,11 +145,12 @@ void *writer_thread(void *arg) {
 
 
 int main(int argc, char **argv) {
+	srand(time(NULL));
 	int i;
 	Buffer_t b = { .head = 0, .tail = 0 }; // create shared buffer
 	
 	// initialize semaphores
-	sem_init(&b.full, 0, 0);
+	sem_init(&b.full, 0, BUFFER_SIZE);
 	sem_init(&b.empty, 0, BUFFER_SIZE);
 	sem_init(&b.insert_lock, 0, 1);
 	sem_init(&b.remove_lock, 0, 1);
@@ -183,6 +191,8 @@ int main(int argc, char **argv) {
 			printf("%d readers exited\n", i);
 		}
 	}
+
+	printf("Total inserted bytes: %d, removed bytes: %d.\nBytes Lost: %d\n", insert_counter, remove_counter, insert_counter - remove_counter);
 
 	// perform once all threads finish executing
 	sem_destroy(&b.full);

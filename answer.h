@@ -5,6 +5,7 @@
 #include <stddef.h> 
 #include <string.h>  // memcpy()
 #include <stdlib.h>  // rand() 
+#include <time.h>    // srand(time()) 
 #include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -18,7 +19,7 @@
 // TODO: enforce boundaries
 #define MAX_THREAD_BUFFER_SIZE 16384 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
 
-#define MAX_WRITER_VALUES 10
+#define MAX_WRITER_VALUES 100
 
 // random number generator config
 #define BUFFER_SIZE_SKEW 1 // lower means higher possibility of generating a small sized buffer
