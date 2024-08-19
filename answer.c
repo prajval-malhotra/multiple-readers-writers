@@ -105,7 +105,7 @@ void *reader_thread(void *arg) {
 		char read_buffer;
 		int data_size = 0;
 		buffer_remove(b, &read_buffer, data_size);
-		if(read_buffer == '#') {
+		if(read_buffer == BUFFER_SENTINEL) {
 			printf("Found sentinel value, exiting.\n");
 			break;
 		}
@@ -151,7 +151,6 @@ int main(int argc, char **argv) {
 	sem_init(&b.empty, 0, BUFFER_SIZE);
 	sem_init(&b.insert_lock, 0, 1);
 	sem_init(&b.remove_lock, 0, 1);
-	sem_init(&b.overwrite_lock, 0, 0);
 
 	pthread_t reader_thids[NUM_READERS];
 	pthread_t writer_thids[NUM_WRITERS];
@@ -178,7 +177,7 @@ int main(int argc, char **argv) {
 
 	char sentinel_buffer[NUM_READERS];
 	for(i = 0; i < NUM_READERS; ++i) {
-		sentinel_buffer[i] = '#';
+		sentinel_buffer[i] = BUFFER_SENTINEL;
 	}
 	buffer_insert(&b, sentinel_buffer, NUM_READERS);
 
@@ -197,7 +196,6 @@ int main(int argc, char **argv) {
 	sem_destroy(&b.empty);
 	sem_destroy(&b.insert_lock);
 	sem_destroy(&b.remove_lock);
-	sem_destroy(&b.overwrite_lock);
 
 	return 0;	
 }

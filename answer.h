@@ -18,12 +18,13 @@
 
 // #define BUFFER_SIZE 65536
 #define BUFFER_SIZE 16000
+#define BUFFER_SENTINEL '#'
 
 // TODO: enforce boundaries
 #define MAX_THREAD_BUFFER_SIZE 8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
 
 // #define MAX_WRITER_VALUES 100
-#define MAX_WRITER_VALUES 100
+#define MAX_WRITER_VALUES 10
 
 // random number generator config
 #define BUFFER_SIZE_SKEW 1 // lower means higher possibility of generating a small sized buffer
@@ -42,7 +43,6 @@ typedef struct Buffer {
     sem_t full;
     sem_t insert_lock;
     sem_t remove_lock;
-    sem_t overwrite_lock;
 
     void (*buffer_insert)(struct Buffer* b, char* insertBuf, size_t insertBufSize);
     void (*buffer_remove)(struct Buffer* b, char *removeBuf, size_t removeBufSize);
