@@ -3,9 +3,10 @@
 static int insert_counter = 0;
 static int remove_counter = 0;
 
+unsigned int char_count[200] = { 0 };
+
 // expect buffer to be malloced?
 int get_external_data(char *buffer, int bufferSizeInBytes) {
-	// static int i = 0;
 
 	static char ch = 'A';
 
@@ -22,7 +23,7 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 	// our data is chars in range ['A' - 'z']. Loop around when 'z' reached.
 
 	memset(buffer, ch, sizeof(char) * bufferSizeInBytes);
-	if(buffer[0] != BUFFER_SENTINEL) printf("Insert %d %c bytes\n", bufferSizeInBytes, buffer[0]);
+	if(buffer[0] != BUFFER_SENTINEL) printf("Insert %d %c bytes\n", bufferSizeInBytes, ch);
 	ch = (ch < 'z') ? ch + 1 : 'A';
 
 
@@ -31,14 +32,14 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 }
 
 void process_data(char *buffer, int bufferSizeInBytes) {
-	// for(int i = 0; i < bufferSizeInBytes; ++i) {
-	// 	if(buffer[i] != )
-	// }
 	int count = 0;
 	while(buffer[count] != BUFFER_SENTINEL && count < bufferSizeInBytes) {
 		++count;
 	}
-	if(buffer[0] != BUFFER_SENTINEL) printf("Remove %d %c bytes\n", count, buffer[0]);
+
+	// if(buffer[0] != BUFFER_SENTINEL) {
+		printf("Remove %d %c bytes\n", count, buffer[0]);
+	// }
 }
 
 /**
@@ -61,6 +62,10 @@ int buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 		int remaining_space = BUFFER_SIZE - b->tail;
 		memcpy(&b->buffer[b->tail], insertBuf, remaining_space);
 		memcpy(&b->buffer[0], insertBuf + remaining_space, insertBufSize - remaining_space);
+	}
+
+	for(int countIdx = 0; countIdx < insertBufSize; ++countIdx) {
+		char_count[insertBuf[countIdx]]++;
 	}
 
 	b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
@@ -98,6 +103,10 @@ void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 		int remaining_space = BUFFER_SIZE - b->head;
 		memcpy(removeBuf, &b->buffer[b->head], remaining_space);
 		memcpy(removeBuf + remaining_space, &b->buffer[0], READ_SIZE - remaining_space);
+	}
+
+	for(int countIdx = 0; countIdx < READ_SIZE; ++countIdx) {
+		char_count[removeBuf[countIdx]]--;
 	}
 
 	b->head = (b->head + READ_SIZE) % BUFFER_SIZE;
@@ -218,6 +227,12 @@ int main(int argc, char **argv) {
 	}
 
 	printf("Total inserted bytes: %d, removed bytes: %d.\nBytes Lost: %d\n", insert_counter, remove_counter, insert_counter - remove_counter);
+
+	for(int i = 0; i < 200; ++i) {
+		if(char_count[i] != 0) {
+			printf("**Char --%c-- count is %d.**\n", i, char_count[i]);
+		}
+	}
 
 	// perform once all threads finish executing
 	sem_destroy(&b.full);

@@ -13,30 +13,30 @@
 #include <semaphore.h>
 
 //TODO Define global data structures to be used
-#define NUM_WRITERS 20
-#define NUM_READERS 40
+#define NUM_WRITERS             10
+#define NUM_READERS             20
 
-#define READ_SIZE 4
+#define READ_SIZE               100
 
-#define BUFFER_SIZE 65536
-// #define BUFFER_SIZE 32000
-#define BUFFER_SENTINEL '#'
+// #define BUFFER_SIZE 65536
+#define BUFFER_SIZE             32000
+// #define BUFFER_SIZE             5000
+#define BUFFER_SENTINEL         '#'
 
 // TODO: enforce boundaries
-#define MAX_THREAD_BUFFER_SIZE 8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
+#define MAX_THREAD_BUFFER_SIZE  8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
 
 // #define WRITER_ITERATIONS 100
-#define WRITER_ITERATIONS 1
+#define WRITER_ITERATIONS       10
 
-// random number generator config
-#define BUFFER_SIZE_SKEW 1 // lower means higher possibility of generating a small sized buffer
-#define SMALL_BUFFER_LOWER 1
-#define SMALL_BUFFER_HIGHER 128
-#define BIG_BUFFER_LOWER 1024
-#define BIG_BUFFER_HIGHER 2048
+// random size buffer generator config
+#define BUFFER_SIZE_SKEW        2   // lower means higher possibility of generating a small sized buffer
+#define SMALL_BUFFER_LOWER      1
+#define SMALL_BUFFER_HIGHER     128
+#define BIG_BUFFER_LOWER        1024
+#define BIG_BUFFER_HIGHER       2048
 
 typedef struct Buffer {
-    // uint16 -> max buffer size is 65536
     uint32_t head;
     uint32_t tail;
     char buffer[BUFFER_SIZE];
