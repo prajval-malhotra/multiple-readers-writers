@@ -20,15 +20,25 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 	// bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
 
 	// our data is chars in range ['A' - 'z']. Loop around when 'z' reached.
+
 	memset(buffer, ch, sizeof(char) * bufferSizeInBytes);
+	if(buffer[0] != BUFFER_SENTINEL) printf("Insert %d %c bytes\n", bufferSizeInBytes, buffer[0]);
 	ch = (ch < 'z') ? ch + 1 : 'A';
+
 
 	return bufferSizeInBytes;
 
 }
 
 void process_data(char *buffer, int bufferSizeInBytes) {
-
+	// for(int i = 0; i < bufferSizeInBytes; ++i) {
+	// 	if(buffer[i] != )
+	// }
+	int count = 0;
+	while(buffer[count] != BUFFER_SENTINEL && count < bufferSizeInBytes) {
+		++count;
+	}
+	if(buffer[0] != BUFFER_SENTINEL) printf("Remove %d %c bytes\n", count, buffer[0]);
 }
 
 /**
@@ -54,7 +64,7 @@ int buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 	}
 
 	b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
-	printf("Insert %ld %c bytes\n", insertBufSize, insertBuf[0]);
+	// printf("Insert %ld %c bytes\n", insertBufSize, insertBuf[0]);
 	insert_counter += insertBufSize;
 	
 	sem_post(&b->insert_lock);
@@ -91,7 +101,7 @@ void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 	}
 
 	b->head = (b->head + READ_SIZE) % BUFFER_SIZE;
-	printf("Remove %d %c bytes\n", READ_SIZE, removeBuf[0]);
+	// printf("Remove %d %c bytes\n", READ_SIZE, removeBuf[0]);
 	remove_counter += READ_SIZE;
 	
 	sem_post(&b->remove_lock);

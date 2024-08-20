@@ -6,7 +6,7 @@ MAKEFILE_NAME = ${firstword ${MAKEFILE_LIST}}
 
 OBJECTS = answer.o			
 DEPENDS = ${OBJECTS:.o=.d}	
-EXEC = run					
+EXEC = exec					
 
 ########## Targets ##########
 
