@@ -20,21 +20,22 @@
 
 // #define BUFFER_SIZE 65536
 #define BUFFER_SIZE             32000
-// #define BUFFER_SIZE             5000
+// #define BUFFER_SIZE             12000
 #define BUFFER_SENTINEL         '#'
 
 // TODO: enforce boundaries
 #define MAX_THREAD_BUFFER_SIZE  8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
 
-// #define WRITER_ITERATIONS 100
 #define WRITER_ITERATIONS       10
 
 // random size buffer generator config
-#define BUFFER_SIZE_SKEW        2   // lower means higher possibility of generating a small sized buffer
+#define BUFFER_SIZE_SKEW        10   // lower means higher possibility of generating a small sized buffer
 #define SMALL_BUFFER_LOWER      1
 #define SMALL_BUFFER_HIGHER     128
 #define BIG_BUFFER_LOWER        1024
 #define BIG_BUFFER_HIGHER       2048
+
+#define CHAR_COUNT_MAP_SIZE     128 // 128 ascii characters, could be smaller
 
 typedef struct Buffer {
     uint32_t head;
