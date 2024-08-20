@@ -52,8 +52,9 @@ int buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 		memcpy(&b->buffer[b->tail], insertBuf, remaining_space);
 		memcpy(&b->buffer[0], insertBuf + remaining_space, insertBufSize - remaining_space);
 	}
+
 	b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
-	printf("Inserted %ld %c bytes at index %d. New tail: %d\n", insertBufSize, insertBuf[0], temp_insert_pos, b->tail);
+	printf("Insert %ld %c bytes\n", insertBufSize, insertBuf[0]);
 	insert_counter += insertBufSize;
 	
 	sem_post(&b->insert_lock);
@@ -74,21 +75,31 @@ int buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 
 	// wait for a full spot
-	sem_wait(&b->full);
+	for(int i = 0; i < READ_SIZE; ++i) {
+		sem_wait(&b->full);
+	}
 
 	// ensure only one thread reads the value
 	sem_wait(&b->remove_lock);
 
-	// memcpy(removeBuf, &b->buffer[b->head], removeBufSize);
-	*removeBuf = b->buffer[b->head]; // remove signle byte from shared buffer
-	b->head = (b->head + 1) % BUFFER_SIZE;
-	printf("Removed 1 byte at index %d. Total bytes removed: %d\n", b->head, remove_counter);
-	remove_counter++;
+	if((b->head + READ_SIZE) < BUFFER_SIZE) {
+		memcpy(removeBuf, &b->buffer[b->head], READ_SIZE);	
+	} else {
+		int remaining_space = BUFFER_SIZE - b->head;
+		memcpy(removeBuf, &b->buffer[b->head], remaining_space);
+		memcpy(removeBuf + remaining_space, &b->buffer[0], READ_SIZE - remaining_space);
+	}
+
+	b->head = (b->head + READ_SIZE) % BUFFER_SIZE;
+	printf("Remove %d %c bytes\n", READ_SIZE, removeBuf[0]);
+	remove_counter += READ_SIZE;
 	
 	sem_post(&b->remove_lock);
 
 	// indicate a freed up spot in the buffer
-	sem_post(&b->empty);
+	for(int i = 0; i < READ_SIZE; ++i) {
+		sem_post(&b->empty);
+	}
 	
 }
 
@@ -97,20 +108,28 @@ void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
  * area and processing it using the process_data() API.
  */
 void *reader_thread(void *arg) {
-	//TODO: Define set-up required
 	printf("Reader\n");
 	Buffer_t* b = (Buffer_t *)arg;
 	
+	char *read_buffer = (char *)malloc(sizeof(char) * READ_SIZE);
 	while(1) {
-		char read_buffer;
-		int data_size = 0;
-		buffer_remove(b, &read_buffer, data_size);
-		if(read_buffer == BUFFER_SENTINEL) {
+		// int data_size = 0;
+		buffer_remove(b, read_buffer, READ_SIZE);
+		if(read_buffer[0] == BUFFER_SENTINEL) {
 			printf("Found sentinel value, exiting.\n");
 			break;
+		} else if(read_buffer[READ_SIZE - 1] == BUFFER_SENTINEL) {
+			int readBufIdx = 0;
+			while(readBufIdx < READ_SIZE && read_buffer[readBufIdx] != BUFFER_SENTINEL) {
+				readBufIdx++;
+			}
+			process_data(read_buffer, readBufIdx + 1);
+			break;
+
 		}
+		process_data(read_buffer, READ_SIZE);
 	}
-	
+	free(read_buffer);
 	return NULL;
 }
 
@@ -128,7 +147,7 @@ void *writer_thread(void *arg) {
 	// malloc max possible input value buffer
 	char *write_buffer = (char *)malloc(sizeof(char) * MAX_THREAD_BUFFER_SIZE);
 
-	for(int iter = 0; iter < MAX_WRITER_VALUES; ++iter) {
+	for(int iter = 0; iter < WRITER_ITERATIONS; ++iter) {
 		unsigned int data_size = get_external_data(write_buffer, 0);
 		if(data_size > 0) {
 			buffer_insert(b, write_buffer, data_size);
@@ -175,11 +194,10 @@ int main(int argc, char **argv) {
 	}
 	printf("All writers exited. Total bytes inserted: %d\n", insert_counter);
 
-	char sentinel_buffer[NUM_READERS];
-	for(i = 0; i < NUM_READERS; ++i) {
-		sentinel_buffer[i] = BUFFER_SENTINEL;
-	}
-	buffer_insert(&b, sentinel_buffer, NUM_READERS);
+	const int num_sentinels = NUM_READERS * READ_SIZE; 
+	char sentinel_buffer[num_sentinels];
+	memset(sentinel_buffer, BUFFER_SENTINEL, num_sentinels);
+	buffer_insert(&b, sentinel_buffer, num_sentinels);
 
 	for(i = 0; i < NUM_READERS; ++i) {
 		if(pthread_join(reader_thids[i], NULL)) {
