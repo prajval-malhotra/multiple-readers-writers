@@ -12,7 +12,7 @@
 #include <sched.h>
 #include <semaphore.h>
 
-// #define DEBUG                   0 // set to 1 for debug printing
+#define DEBUG                   1 // set for debug printing
 #ifdef DEBUG
     #define DEBUG_PRINT(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
 #else
@@ -21,9 +21,11 @@
 
 //TODO Define global data structures to be used
 #define NUM_WRITERS             10
-#define NUM_READERS             20
+#define NUM_READERS             25
 
-#define READ_SIZE               128
+#define READ_SIZE               1028
+
+#define CHUNK_SIZE              1024
 
 // #define BUFFER_SIZE 65536
 #define BUFFER_SIZE             32000
@@ -33,10 +35,10 @@
 // TODO: enforce boundaries
 #define MAX_THREAD_BUFFER_SIZE  8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
 
-#define WRITER_ITERATIONS       10
+#define WRITER_ITERATIONS       1000
 
 // random size buffer generator config
-#define BUFFER_SIZE_SKEW        10   // lower means higher possibility of generating a small sized buffer
+#define BUFFER_SIZE_SKEW        5   // lower means higher possibility of generating a small sized buffer
 #define SMALL_BUFFER_LOWER      1
 #define SMALL_BUFFER_HIGHER     128
 #define BIG_BUFFER_LOWER        1024
@@ -55,8 +57,8 @@ typedef struct Buffer {
     sem_t remove_lock;
     sem_t sentinel_lock;
 
-    void (*buffer_insert)(struct Buffer* b, char* insertBuf, size_t insertBufSize);
-    void (*buffer_remove)(struct Buffer* b, char *removeBuf, size_t removeBufSize);
+    void (*buffer_insert)(struct Buffer* b, char* insertBuf, int insertBufSize);
+    void (*buffer_remove)(struct Buffer* b, char *removeBuf, int removeBufSize);
 
 } Buffer_t;
 
