@@ -12,11 +12,18 @@
 #include <sched.h>
 #include <semaphore.h>
 
+// #define DEBUG                   0 // set to 1 for debug printing
+#ifdef DEBUG
+    #define DEBUG_PRINT(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
+#else
+    #define DEBUG_PRINT(...) do { } while (0)
+#endif
+
 //TODO Define global data structures to be used
 #define NUM_WRITERS             10
 #define NUM_READERS             20
 
-#define READ_SIZE               100
+#define READ_SIZE               128
 
 // #define BUFFER_SIZE 65536
 #define BUFFER_SIZE             32000

@@ -23,7 +23,7 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 		bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
 	}
 
-	printf("Insert %d %c bytes\n", bufferSizeInBytes, ch);
+	DEBUG_PRINT("Insert %d %c bytes\n", bufferSizeInBytes, ch);
 
 	// our data is chars in range ['A' - 'z']. Loop around when 'z' reached.
 	memset(buffer, ch, sizeof(char) * bufferSizeInBytes);
@@ -128,14 +128,14 @@ void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
  * area and processing it using the process_data() API.
  */
 void *reader_thread(void *arg) {
-	printf("Create reader\n");
+	DEBUG_PRINT("Create reader\n");
 	Buffer_t* b = (Buffer_t *)arg;
 	
 	char *read_buffer = (char *)malloc(sizeof(char) * READ_SIZE);
 	while(1) {
 		buffer_remove(b, read_buffer, READ_SIZE);
 		if(read_buffer[0] == BUFFER_SENTINEL) {
-			printf("Found sentinel value, exiting.\n");
+			DEBUG_PRINT("Found sentinel value, exiting.\n");
 			break;
 		} else if(read_buffer[READ_SIZE - 1] == BUFFER_SENTINEL) {
 			// process all valid, non sentinel data
@@ -160,7 +160,7 @@ void *reader_thread(void *arg) {
  * for later processing by one of the reader threads.
  */
 void *writer_thread(void *arg) {
-	printf("Create writer\n");
+	DEBUG_PRINT("Create writer\n");
 	Buffer_t* b = (Buffer_t *)arg;
 
 	// malloc max possible input value buffer
@@ -194,23 +194,23 @@ int main(int argc, char **argv) {
 	
 	for(i = 0; i < NUM_READERS; i++) { 
 		if(pthread_create(&reader_thids[i], NULL, reader_thread, &b) != 0) {
-			printf("Problem creating reader #%d\n", i);
+			DEBUG_PRINT("Problem creating reader #%d\n", i);
 		}
 	}
 
 	for(i = 0; i < NUM_WRITERS; i++) { 
 		if(pthread_create(&writer_thids[i], NULL, writer_thread, &b) != 0) {
-			printf("Problem creating writer #%d\n", i);
+			DEBUG_PRINT("Problem creating writer #%d\n", i);
 		}
 	}
 
 
 	for(i = 0; i < NUM_WRITERS; ++i) {
 		if(pthread_join(writer_thids[i], NULL)) {
-			printf("Problem joining writer #%d\n", i);
+			DEBUG_PRINT("Problem joining writer #%d\n", i);
 		}
 	}
-	printf("All writers exited. Total bytes inserted: %d\n", insert_counter);
+	DEBUG_PRINT("All writers exited. Total bytes inserted: %d\n", insert_counter);
 
 	const int num_sentinels = NUM_READERS * READ_SIZE; 
 	char sentinel_buffer[num_sentinels];
@@ -219,17 +219,17 @@ int main(int argc, char **argv) {
 
 	for(i = 0; i < NUM_READERS; ++i) {
 		if(pthread_join(reader_thids[i], NULL)) {
-			printf("Problem joining reader #%d\n", i);
+			DEBUG_PRINT("Problem joining reader #%d\n", i);
 		} else {
-			printf("%d readers exited\n", i);
+			DEBUG_PRINT("%d readers exited\n", i);
 		}
 	}
 
-	printf("Total inserted bytes: %d, removed bytes: %d.\nBytes Lost: %d\n", insert_counter, remove_counter, insert_counter - remove_counter);
+	DEBUG_PRINT("Total inserted bytes: %d, removed bytes: %d.\nBytes Lost: %d\n", insert_counter, remove_counter, insert_counter - remove_counter);
 
 	for(int i = 0; i < CHAR_COUNT_MAP_SIZE; ++i) {
 		if(char_map[i] != 0) {
-			printf("**Char --%c-- count is %d.**\n", i, char_map[i]);
+			printf("**Char '%c' count is %d.**\n", i, char_map[i]);
 		}
 	}
 
