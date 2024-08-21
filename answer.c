@@ -2,7 +2,46 @@
 
 static int insert_counter = 0;
 static int remove_counter = 0;
-static unsigned int char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
+static unsigned int insert_char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
+static unsigned int remove_char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
+
+/**
+ *	print final results
+ */
+static void inline print_results() {
+	printf("\033[33m"); // print in yellow
+	printf("Note: '#' is a sentinel value, like a delimiter. \n> 0 '#'s dropped does not imply data was lost\n"); // print in yellow
+	printf("\033[0m"); // print in blue
+	printf("----------------------------------------------------------\n");
+	printf("\033[34m"); // print in blue
+	printf("Character\tInsertions\tRemovals\tDifference\n");
+	printf("\033[0m"); // print in blue
+	printf("----------------------------------------------------------\n");
+	unsigned int total_char_types = 0;
+	unsigned int total_insertions = 0;
+	unsigned int total_removals   = 0;
+	unsigned int char_difference  = 0;
+	for(int i = 0; i < CHAR_COUNT_MAP_SIZE; ++i) {
+	total_insertions += insert_char_map[i];
+	total_removals   += remove_char_map[i];
+	char_difference  += insert_char_map[i] - remove_char_map[i];
+
+		if(insert_char_map[i] != 0 && remove_char_map[i] != 0) {
+			++total_char_types;
+			(insert_char_map[i] - remove_char_map[i]) ? printf("\033[31m") : printf("\033[32m");
+			printf("%c:\t\t%d\t\t%d\t\t%d\t\n", 
+				i, insert_char_map[i], remove_char_map[i],
+				insert_char_map[i] - remove_char_map[i]);
+			printf("\033[0m"); // reset special formatting
+			
+		}
+	}
+	printf("----------------------------------------------------------\n");
+	printf("\033[34m");
+	printf("%d\t\t%d\t\t%d\t\t%d\t\n", 
+			total_char_types, total_insertions, total_removals, char_difference);
+	printf("\033[0m");
+}
 
 /** 
  *  Fills up the provided buffer with a randomly sized character
@@ -66,7 +105,7 @@ int buffer_insert(struct Buffer* b, char* insertBuf, size_t insertBufSize) {
 
 	// keep track of all inserted data for error check at the end
 	for(int countIdx = 0; countIdx < insertBufSize; ++countIdx) {
-		char_map[insertBuf[countIdx]]++;
+		++insert_char_map[insertBuf[countIdx]];
 	}
 
 	b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
@@ -108,7 +147,7 @@ void buffer_remove(struct Buffer* b, char* removeBuf, size_t removeBufSize) {
 
 	// keep track of all removed data for error check at the end
 	for(int countIdx = 0; countIdx < READ_SIZE; ++countIdx) {
-		char_map[removeBuf[countIdx]]--;
+		++remove_char_map[removeBuf[countIdx]];
 	}
 
 	b->head = (b->head + READ_SIZE) % BUFFER_SIZE;
@@ -152,7 +191,6 @@ void *reader_thread(void *arg) {
 	free(read_buffer);
 	return NULL;
 }
-
 
 /**
  * This thread is responsible for pulling data from a device using
@@ -227,11 +265,7 @@ int main(int argc, char **argv) {
 
 	DEBUG_PRINT("Total inserted bytes: %d, removed bytes: %d.\nBytes Lost: %d\n", insert_counter, remove_counter, insert_counter - remove_counter);
 
-	for(int i = 0; i < CHAR_COUNT_MAP_SIZE; ++i) {
-		if(char_map[i] != 0) {
-			printf("**Char '%c' count is %d.**\n", i, char_map[i]);
-		}
-	}
+	print_results();
 
 	// perform once all threads finish executing
 	sem_destroy(&b.full);
