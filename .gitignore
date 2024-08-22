@@ -1,4 +1,9 @@
 *.o
 *.d
 run
+exec
+out
+test_out
+test.py
+EXEC
 *.txt

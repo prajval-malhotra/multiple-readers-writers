@@ -1,0 +1,6 @@
+- used semaphores for mutual exclusion and synchronization 
+    - all sempahores belong to the buffer structure itself and are only accessed by the buffer insert and remove operations
+    - the buffer itself is a fixed size ring buffer
+    - a single semaphore value corresponds to an empty or full space on the shared buffer
+        - a thread must acquire 1 semaphore per spot of the buffer they want to access
+        - at init state, there are BUFFER_SIZE empty semaphores as the buffer is empty, and 0 full semaphores,

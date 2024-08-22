@@ -1,49 +1,7 @@
 #include "answer.h"
 
-static int insert_counter = 0;
-static int remove_counter = 0;
-static unsigned int insert_char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
-static unsigned int remove_char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
-
-/**
- *	print final results
- */
-static void inline print_results() {
-	printf("\033[1m==========================================================\033[0m\n");
-	printf("\033[33m"); // print in yellow
-	printf("Note: '#' is a sentinel value, like a delimiter. \n> 0 '#'s dropped does not imply data was lost\n"); // print in yellow
-	printf("\033[0m"); // print in blue
-	printf("\033[1m----------------------------------------------------------\033[0m\n");
-	printf("\033[34m"); // print in blue
-	printf("\033[1mCharacter\tInsertions\tRemovals\tDifference\n");
-	printf("\033[0m"); // reset
-	printf("\033[1m----------------------------------------------------------\033[0m\n");
-	unsigned int total_char_types = 0;
-	unsigned int total_insertions = 0;
-	unsigned int total_removals   = 0;
-	unsigned int char_difference  = 0;
-	for(unsigned int i = 0; i < CHAR_COUNT_MAP_SIZE; ++i) {
-	total_insertions += insert_char_map[i];
-	total_removals   += remove_char_map[i];
-	char_difference  += insert_char_map[i] - remove_char_map[i];
-
-		if(insert_char_map[i] != 0 && remove_char_map[i] != 0) {
-			++total_char_types;
-			(insert_char_map[i] - remove_char_map[i]) ? printf("\033[31m") : printf("\033[32m");
-			printf("%c:\t\t%u\t\t%u\t\t%u\t\n", 
-				i, insert_char_map[i], remove_char_map[i],
-				insert_char_map[i] - remove_char_map[i]);
-			printf("\033[0m"); // reset special formatting
-			
-		}
-	}
-	printf("\033[1m----------------------------------------------------------\n");
-	printf("\033[34m");
-	printf("\033[1m%u\t\t%u\t\t%u\t\t%u\t\n", 
-			total_char_types, total_insertions, total_removals, char_difference);
-	printf("\033[0m");
-	printf("\033[1m==========================================================\033[0m\n");
-}
+static int insert_char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
+static int remove_char_map[CHAR_COUNT_MAP_SIZE] = { 0 };
 
 /** 
  *  Fills up the provided buffer with a randomly sized character
@@ -52,15 +10,14 @@ static void inline print_results() {
  *	arg1 is a ptr to a malloced buffer of size MAX_THREAD_BUFFER_SIZE
  * 	arg 2 is unused and set in the function in this psuedo implementation
  */
-int get_external_data(char *buffer, int bufferSizeInBytes) {
+static int get_external_data(char *buffer, int bufferSizeInBytes) {
 
 	static char ch = 'A';
 
 	// generate differing sizes of buffers
 	if((rand() % 10) > BUFFER_SIZE_SKEW) { // generate buffer in small range
 		bufferSizeInBytes = rand() % (SMALL_BUFFER_HIGHER + 1 - SMALL_BUFFER_LOWER) + SMALL_BUFFER_LOWER;
-	}
-	else { // generate buffer in large range
+	} else { // generate buffer in large range
 		bufferSizeInBytes = rand() % (BIG_BUFFER_HIGHER + 1 - BIG_BUFFER_LOWER) + BIG_BUFFER_LOWER;
 	}
 
@@ -77,7 +34,7 @@ int get_external_data(char *buffer, int bufferSizeInBytes) {
 /** 
  *	Does some data processing
  */
-void process_data(char *buffer, int bufferSizeInBytes) {
+static void process_data(char *buffer, int bufferSizeInBytes) {
 	// do some processing
 	DEBUG_PRINT("Remove %d bytes.\n", bufferSizeInBytes);
 }
@@ -86,7 +43,13 @@ void process_data(char *buffer, int bufferSizeInBytes) {
  * Insert value arg2 into shared buffer pointed to by arg1 of size arg3
  * Return value < 0 on errors
  */
-int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize) {
+static int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize) {
+
+	struct timespec ts;
+	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+        printf("clock_gettime error\n");
+		return 0;
+    }
 
 	int insertBufSize = totalInsertSize;
 	if(totalInsertSize > CHUNK_SIZE) {
@@ -96,17 +59,29 @@ int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize) {
 	// insert in chunks, prevent deadlocks when all 
 	//	writers get insertBufSize-1 empties and get stuck
 	while(totalInsertSize > 0) {
-
 		if(totalInsertSize < CHUNK_SIZE) {
 			insertBufSize = totalInsertSize;
 		}
 
-		totalInsertSize -= CHUNK_SIZE;
-
+    	ts.tv_sec += 1; // should probably make this smaller - is there a better solution?
 		// only allow write when insertBufSize memory available
-		for(size_t i = 0; i < insertBufSize; ++i) {
-			sem_wait(&b->empty); // wait for a slot to empty up
+		bool skip_iteration = false;
+		for(int bufIdx = 0; bufIdx < insertBufSize; ++bufIdx) {
+			if(sem_timedwait(&b->empty, &ts) != 0) {
+				// release all acquired semaphores after waiting for too long
+				while(bufIdx >= 0) {
+					sem_post(&b->empty);
+					--bufIdx;
+				}
+				skip_iteration = true; // dont insert anything
+				break;
+			}
 		}
+
+		if(skip_iteration == true) {
+			continue;
+		}
+		totalInsertSize -= CHUNK_SIZE;
 
 		// make sure only one thread can write to a spot
 		sem_wait(&b->insert_lock);
@@ -121,17 +96,15 @@ int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize) {
 		}
 
 		// keep track of all inserted data for error check at the end
-		for(unsigned int countIdx = 0; countIdx < insertBufSize; ++countIdx) {
+		for(int countIdx = 0; countIdx < insertBufSize; ++countIdx) {
 			++insert_char_map[insertBuf[countIdx]];
 		}
-
 		b->tail = (b->tail + insertBufSize) % BUFFER_SIZE;
-		insert_counter += insertBufSize;
 		
 		sem_post(&b->insert_lock);
 		
 		// indicate a full spot for every byte written, ready to be read
-		for(unsigned int i = 0; i < insertBufSize; ++i) {
+		for(int i = 0; i < insertBufSize; ++i) {
 			sem_post(&b->full);
 		}
 	
@@ -146,27 +119,41 @@ int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize) {
  * Value removed is arg2
  * Return value < 0 on errors
  */
-void buffer_remove(struct Buffer* b, char* removeBuf, int totalRemoveSize) {
+static void buffer_remove(struct Buffer* b, char* removeBuf, int totalRemoveSize) {
+
+	struct timespec ts;
+	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+        printf("clock_gettime error\n");
+		return;
+    }
 
 	int bufferRemoveSize = totalRemoveSize;
-	if(totalRemoveSize > CHUNK_SIZE) {
-		bufferRemoveSize = CHUNK_SIZE;
-	}
+	bufferRemoveSize = CHUNK_SIZE;
 
 	// remove in chunks, prevent deadlocks when all 
 	//	readers get removeBufSize-1 fulls and get stuck
 	while(totalRemoveSize > 0) {
-
 		if(totalRemoveSize < CHUNK_SIZE) {
 			bufferRemoveSize = totalRemoveSize;
 		}
-
-		totalRemoveSize -= CHUNK_SIZE;
-
+		ts.tv_sec += 1;
 		// wait for a full spot
-		for(unsigned int i = 0; i < bufferRemoveSize; ++i) {
-			sem_wait(&b->full);
+		bool skip_iteration = false;
+		for(int bufIdx = 0; bufIdx < bufferRemoveSize; ++bufIdx) {
+			if(sem_timedwait(&b->full, &ts) != 0) {
+				// release all acquired semaphores after waiting for too long
+				while(bufIdx >= 0) {
+					sem_post(&b->full);
+					--bufIdx;
+				}
+				skip_iteration = true;
+				break;
+			}
 		}
+		if(skip_iteration == true) {
+			continue;
+		}
+		totalRemoveSize -= CHUNK_SIZE;
 
 		// ensure only one thread reads the value
 		sem_wait(&b->remove_lock);
@@ -180,17 +167,15 @@ void buffer_remove(struct Buffer* b, char* removeBuf, int totalRemoveSize) {
 		}
 
 		// keep track of all removed data for error check at the end
-		for(unsigned int countIdx = 0; countIdx < bufferRemoveSize; ++countIdx) {
+		for(int countIdx = 0; countIdx < bufferRemoveSize; ++countIdx) {
 			++remove_char_map[removeBuf[countIdx]];
 		}
-
 		b->head = (b->head + bufferRemoveSize) % BUFFER_SIZE;
-		remove_counter += bufferRemoveSize;
-		
+
 		sem_post(&b->remove_lock);
 
 		// indicate a freed up spot in the buffer
-		for(unsigned int i = 0; i < bufferRemoveSize; ++i) {
+		for(int i = 0; i < bufferRemoveSize; ++i) {
 			sem_post(&b->empty);
 		}
 
@@ -214,7 +199,7 @@ void *reader_thread(void *arg) {
 			break;
 		} else if(read_buffer[READ_SIZE - 1] == BUFFER_SENTINEL) {
 			// process all valid, non sentinel data
-			unsigned int readBufIdx = 0;
+			int readBufIdx = 0;
 			while(readBufIdx < READ_SIZE && read_buffer[readBufIdx] != BUFFER_SENTINEL) {
 				readBufIdx++;
 			}
@@ -240,8 +225,8 @@ void *writer_thread(void *arg) {
 	// malloc max possible input value buffer
 	char *write_buffer = (char *)malloc(sizeof(char) * MAX_THREAD_BUFFER_SIZE);
 
-	for(unsigned int iter = 0; iter < WRITER_ITERATIONS; ++iter) {
-		unsigned int data_size = get_external_data(write_buffer, 0);
+	for(int iter = 0; iter < WRITER_ITERATIONS; ++iter) {
+		int data_size = get_external_data(write_buffer, 0);
 		if(data_size > 0) {
 			buffer_insert(b, write_buffer, data_size);
 		}
@@ -249,6 +234,51 @@ void *writer_thread(void *arg) {
 
 	free(write_buffer);
 	return NULL;
+}
+
+
+/**
+ *	print final results
+ */
+static void print_results() {
+	printf("\033[1m==========================================================\033[0m\n");
+	printf("\033[33m"); // print in yellow
+	printf("Note: '#' is a sentinel value, like a delimiter. \n> 0 '#'s dropped does not imply data was lost\n"); // print in yellow
+	printf("\033[0m"); // print in blue
+	printf("\033[1m----------------------------------------------------------\033[0m\n");
+	printf("\033[34m"); // print in blue
+	printf("\033[1mCharacter\tInsertions\tRemovals\tDifference\n");
+	printf("\033[0m"); // reset
+	printf("\033[1m----------------------------------------------------------\033[0m\n");
+	int total_char_types = 0;
+	int total_insertions = 0;
+	int total_removals   = 0;
+	int char_difference  = 0;
+	for(int i = 0; i < CHAR_COUNT_MAP_SIZE; ++i) {
+		total_insertions += insert_char_map[i];
+		total_removals   += remove_char_map[i];
+		char_difference  += insert_char_map[i] - remove_char_map[i];
+
+		if(insert_char_map[i] != 0 && remove_char_map[i] != 0) {
+			++total_char_types;
+			(insert_char_map[i] - remove_char_map[i]) ? printf("\033[31m") : printf("\033[32m");
+			printf("%c:\t\t%d\t\t%d\t\t%d\t\n", 
+				i, insert_char_map[i], remove_char_map[i],
+				insert_char_map[i] - remove_char_map[i]);
+			printf("\033[0m"); // reset special formatting
+			
+		}
+	}
+	printf("\033[1m----------------------------------------------------------\n");
+	printf("\033[34m");
+	printf("\033[1m%u\t\t%u\t\t%u\t\t%u\t\033[0m\n", 
+			total_char_types, total_insertions, total_removals, char_difference);
+	printf("\033[1m----------------------------------------------------------\033[0m\n");
+	int total_rw = total_insertions + total_removals;
+	printf("\033[1m %d kilobytes read/written\n", (total_rw > 0) ? total_rw / 1000 : 0);
+	printf("\033[1m %d bytes read/written\n", total_rw);
+	printf("\033[0m");
+	printf("\033[1m==========================================================\033[0m\n");
 }
 
 
@@ -278,19 +308,20 @@ int main(int argc, char **argv) {
 		}
 	}
 
-
+	// wait for all writers to finish first
 	for(i = 0; i < NUM_WRITERS; ++i) {
 		if(pthread_join(writer_thids[i], NULL)) {
 			DEBUG_PRINT("Problem joining writer #%u\n", i);
 		}
 	}
-	DEBUG_PRINT("All writers exited. Total bytes inserted: %u\n", insert_counter);
+	DEBUG_PRINT("All writers exited.\n");
 
 	const int num_sentinels = NUM_READERS * READ_SIZE; 
 	char sentinel_buffer[num_sentinels];
 	memset(sentinel_buffer, BUFFER_SENTINEL, num_sentinels);
 	buffer_insert(&b, sentinel_buffer, num_sentinels);
 
+	// wait for readers to read all data in the buffer
 	for(i = 0; i < NUM_READERS; ++i) {
 		if(pthread_join(reader_thids[i], NULL)) {
 			DEBUG_PRINT("Problem joining reader #%u\n", i);

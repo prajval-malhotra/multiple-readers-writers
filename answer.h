@@ -12,30 +12,38 @@
 #include <sched.h>
 #include <semaphore.h>
 
-#define DEBUG                   1 // set for debug printing
+#define DEBUG                   1 // uncomment for debug printing
 #ifdef DEBUG
     #define DEBUG_PRINT(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
 #else
     #define DEBUG_PRINT(...) do { } while (0)
 #endif
 
-//TODO Define global data structures to be used
-#define NUM_WRITERS             10
-#define NUM_READERS             25
+// num of readers and writers
+#define NUM_WRITERS             20
+#define NUM_READERS             35
 
-#define READ_SIZE               1028
-
+// amount of bytes readers will try to read at a time
+#define READ_SIZE               1024
+// num of bytes readers will split their reads into
 #define CHUNK_SIZE              1024
 
-// #define BUFFER_SIZE 65536
-#define BUFFER_SIZE             32000
-// #define BUFFER_SIZE             12000
+// ive noticed a buffer size of about 1/130th the size of total data to be
+//  usually sufficient, without long waiting times 
+// eg, for cases where im reading/writing a total of 3900kb, a 30k byte buffer does not
+//  cause a bottlenck. you may see the timed semwait come into play more and more with 
+//  reducing buffer sizes under this ratio - go too low and we start losing data. 
+#define BUFFER_SIZE             30000 // in bytes
+
+// this is not a valid data value that we are processing, think of it like a 
+//  delimiter to tell the readers when to stop 
 #define BUFFER_SENTINEL         '#'
 
-// TODO: enforce boundaries
-#define MAX_THREAD_BUFFER_SIZE  8192 // BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
+// BIG_BUFFER_HIGHER <= MAX_THREAD_BUFFER_SIZE <= BUFFER_SIZE
+#define MAX_THREAD_BUFFER_SIZE  8192
 
-#define WRITER_ITERATIONS       1000
+// num of times each writer will loop and produce a random sized insertion value
+#define WRITER_ITERATIONS       100
 
 // random size buffer generator config
 #define BUFFER_SIZE_SKEW        5   // lower means higher possibility of generating a small sized buffer
@@ -47,6 +55,7 @@
 #define CHAR_COUNT_MAP_SIZE     128 // 128 ascii characters, could be smaller
 
 typedef struct Buffer {
+    // fixed size ring buffer
     uint32_t head;
     uint32_t tail;
     char buffer[BUFFER_SIZE];
@@ -55,16 +64,7 @@ typedef struct Buffer {
     sem_t full;
     sem_t insert_lock;
     sem_t remove_lock;
-    sem_t sentinel_lock;
-
-    void (*buffer_insert)(struct Buffer* b, char* insertBuf, int insertBufSize);
-    void (*buffer_remove)(struct Buffer* b, char *removeBuf, int removeBufSize);
 
 } Buffer_t;
-
-typedef enum OperationType {
-    HEAD = 0,
-    TAIL,
-} OperationType;
 
 #endif /* _ANSWER_H_ */
