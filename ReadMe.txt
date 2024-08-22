@@ -4,3 +4,10 @@
     - a single semaphore value corresponds to an empty or full space on the shared buffer
         - a thread must acquire 1 semaphore per spot of the buffer they want to access
         - at init state, there are BUFFER_SIZE empty semaphores as the buffer is empty, and 0 full semaphores,
+
+To clone and run the program - 
+
+- git clone https://github.com/prajval-malhotra/multiple-readers-writers.git
+- cd multiple-readers-writers
+- make clean && make
+- ./exec
