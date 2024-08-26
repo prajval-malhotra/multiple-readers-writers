@@ -11,3 +11,7 @@ To clone and run the program -
 - cd multiple-readers-writers
 - make clean && make
 - ./exec
+
+
+Sample output - 
+![alt text](https://drive.google.com/file/d/1h-yePMQecVSKHxF3qS2fB9Tu2_9zduSv/view?usp=sharing)
