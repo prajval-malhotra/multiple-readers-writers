@@ -12,12 +12,19 @@
 #include <sched.h>
 #include <semaphore.h>
 
+// uncomment to run using the semaphore or condition variable solution 
+// #define SEMAPHORE
+#define COND_VAR
+
 #define DEBUG                   1 // uncomment for debug printing
 #ifdef DEBUG
     #define DEBUG_PRINT(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
 #else
     #define DEBUG_PRINT(...) do { } while (0)
 #endif
+
+// macro to get min of two numbers
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // num of readers and writers
 #define NUM_WRITERS             20
@@ -60,10 +67,21 @@ typedef struct Buffer {
     uint32_t tail;
     char buffer[BUFFER_SIZE];
 
+#ifdef SEMAPHORE
     sem_t empty;
     sem_t full;
     sem_t insert_lock;
     sem_t remove_lock;
+#endif /* SEMAPHORE */
+
+
+#ifdef COND_VAR
+    pthread_mutex_t mutex;
+    pthread_mutex_t insert_mutex;
+    pthread_mutex_t remove_mutex;
+    pthread_cond_t not_full;
+    pthread_cond_t not_empty;
+#endif /* COND_VAR */
 
 } Buffer_t;
 

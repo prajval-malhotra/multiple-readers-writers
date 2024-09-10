@@ -39,6 +39,10 @@ static void process_data(char *buffer, int bufferSizeInBytes) {
 	DEBUG_PRINT("Remove %d bytes.\n", bufferSizeInBytes);
 }
 
+/***************** SEMAPHORE IMPLEMENTATION STARTS ******************/
+
+#ifdef SEMAPHORE
+
 /**
  * Insert value arg2 into shared buffer pointed to by arg1 of size arg3
  * Return value < 0 on errors
@@ -48,7 +52,7 @@ static int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize)
 	struct timespec ts;
 	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
         printf("clock_gettime error\n");
-		return 0;
+		return -1;
     }
 
 	int insertBufSize = totalInsertSize;
@@ -119,12 +123,12 @@ static int buffer_insert(struct Buffer* b, char* insertBuf, int totalInsertSize)
  * Value removed is arg2
  * Return value < 0 on errors
  */
-static void buffer_remove(struct Buffer* b, char* removeBuf, int totalRemoveSize) {
+static int buffer_remove(struct Buffer* b, char* removeBuf, int totalRemoveSize) {
 
 	struct timespec ts;
 	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
         printf("clock_gettime error\n");
-		return;
+		return -1;
     }
 
 	int bufferRemoveSize = totalRemoveSize;
@@ -180,8 +184,114 @@ static void buffer_remove(struct Buffer* b, char* removeBuf, int totalRemoveSize
 		}
 
 	}
+
+	return totalRemoveSize;
 	
 }
+
+#endif /* SEMAPHORE */
+
+/***************** SEMAPHORE IMPLEMENTATION ENDS ******************/
+
+
+
+/***************** CONDITION VARIABLE IMPLEMENTATION STARTS ******************/
+
+#ifdef COND_VAR
+
+/*
+ *	Takes a ptr to Buffer_t and returns the occupied spaces based on members head, tail
+ */
+static inline int get_buffer_full_slots(const Buffer_t* b) {
+    return (b->tail - b->head + BUFFER_SIZE) % BUFFER_SIZE;
+}
+
+/*
+ *	Takes a ptr to a Buffer_t and returns the un-occupied spaces based on members head, tail
+ */
+static inline int get_buffer_empty_slots(const Buffer_t* b) {
+    return BUFFER_SIZE - 1 - get_buffer_full_slots(b);
+}
+
+/**
+ * Insert value arg2 into shared buffer pointed to by arg1 of size arg3
+ * Return value < 0 on errors
+ */
+int buffer_insert(Buffer_t* b, char* insertBuf, int totalInsertSize) {
+    
+	int remainingSize = totalInsertSize;
+    
+	// insert in chunks
+    while (remainingSize > 0) {
+		// mutex for cond var
+        pthread_mutex_lock(&b->insert_mutex);
+        
+        int insertSize = MIN(remainingSize, CHUNK_SIZE);
+
+		// wait for atleast insertSize empty spots
+        while (get_buffer_empty_slots(b) < insertSize) {
+			pthread_cond_wait(&b->not_full, &b->insert_mutex);
+        }
+
+		// insert data into buffer, update count in char map (checking correctness)
+		for (int i = 0; i < insertSize; i++) {
+            char c = insertBuf[totalInsertSize - remainingSize + i];
+            b->buffer[b->tail] = c;
+            b->tail = (b->tail + 1) % BUFFER_SIZE;
+            ++insert_char_map[c];
+        }
+
+		// wake up next thread waiting to insert - there are atleast insertSize full spots now
+        pthread_cond_signal(&b->not_empty);
+        pthread_mutex_unlock(&b->insert_mutex);
+        
+		// update remaining bytes left to remove
+        remainingSize -= insertSize;
+    }
+    
+    return totalInsertSize;
+}
+
+/**
+ * Remove value from shared buffer pointed to by arg1. 
+ * Value removed is arg2
+ * Return value < 0 on errors
+ */
+int buffer_remove(Buffer_t* b, char* removeBuf, int totalRemoveSize) {
+    int remainingSize = totalRemoveSize;
+    
+    while (remainingSize > 0) {
+        pthread_mutex_lock(&b->remove_mutex);
+        
+        int removeSize = MIN(remainingSize, CHUNK_SIZE);
+
+		// wait for atleast removeSize full spots
+        while (get_buffer_full_slots(b) < removeSize) {
+			pthread_cond_wait(&b->not_empty, &b->remove_mutex);
+        }
+
+		// remove data from buffer, update count in char map (checking correctness)
+        for (int i = 0; i < removeSize; i++) {
+            char c = b->buffer[b->head];
+            removeBuf[totalRemoveSize - remainingSize + i] = c;
+            b->head = (b->head + 1) % BUFFER_SIZE;
+            ++remove_char_map[c]; // keep track of all removed data for error check at the end
+        }
+        
+		// wake up a waiting thread - there are atleast removeSize empty spots now
+        pthread_cond_signal(&b->not_full);
+        pthread_mutex_unlock(&b->remove_mutex);
+        
+        remainingSize -= removeSize;
+    }
+    
+    return totalRemoveSize;
+}
+#endif /* COND_VAR */
+
+
+/***************** CONDITION VARIABLE IMPLEMENTATION ENDS ******************/
+
 
 /**
  * This thread is responsible for pulling data off of the shared data 
@@ -287,31 +397,40 @@ int main(int argc, char **argv) {
 	srand(time(NULL)); // set time based seed for truly random values
 	Buffer_t b = { .head = 0, .tail = 0 }; // create shared buffer
 	
+#ifdef SEMAPHORE
 	// initialize semaphores
 	sem_init(&b.full, 0, 0);
 	sem_init(&b.empty, 0, BUFFER_SIZE);
 	sem_init(&b.insert_lock, 0, 1);
 	sem_init(&b.remove_lock, 0, 1);
+#endif /* SEMAPHORE */
+
+#ifdef COND_VAR
+	pthread_mutex_init(&b.insert_mutex, NULL);
+	pthread_mutex_init(&b.remove_mutex, NULL);
+	pthread_mutex_init(&b.insert_mutex, NULL);
+#endif /* COND_VAR */
 
 	pthread_t reader_thids[NUM_READERS];
 	pthread_t writer_thids[NUM_WRITERS];
 	
+	clock_t start_time = clock();
 	for(i = 0; i < NUM_READERS; i++) { 
 		if(pthread_create(&reader_thids[i], NULL, reader_thread, &b) != 0) {
-			DEBUG_PRINT("Problem creating reader #%u\n", i);
+			DEBUG_PRINT("Problem creating reader #%d\n", i);
 		}
 	}
 
 	for(i = 0; i < NUM_WRITERS; i++) { 
 		if(pthread_create(&writer_thids[i], NULL, writer_thread, &b) != 0) {
-			DEBUG_PRINT("Problem creating writer #%u\n", i);
+			DEBUG_PRINT("Problem creating writer #%d\n", i);
 		}
 	}
 
 	// wait for all writers to finish first
 	for(i = 0; i < NUM_WRITERS; ++i) {
 		if(pthread_join(writer_thids[i], NULL)) {
-			DEBUG_PRINT("Problem joining writer #%u\n", i);
+			DEBUG_PRINT("Problem joining writer #%d\n", i);
 		}
 	}
 	DEBUG_PRINT("All writers exited.\n");
@@ -324,19 +443,31 @@ int main(int argc, char **argv) {
 	// wait for readers to read all data in the buffer
 	for(i = 0; i < NUM_READERS; ++i) {
 		if(pthread_join(reader_thids[i], NULL)) {
-			DEBUG_PRINT("Problem joining reader #%u\n", i);
+			DEBUG_PRINT("Problem joining reader #%d\n", i);
 		} else {
-			DEBUG_PRINT("%u readers exited\n", i);
+			DEBUG_PRINT("%d readers exited\n", i);
 		}
 	}
 
+	clock_t end_time = clock();
+
 	print_results();
 
-	// perform once all threads finish executing
+    printf("Elapsed: %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+
+	// destroy mutexes once all threads finish executing
+#ifdef SEMAPHORE
 	sem_destroy(&b.full);
 	sem_destroy(&b.empty);
 	sem_destroy(&b.insert_lock);
 	sem_destroy(&b.remove_lock);
+#endif /* SEMAPHORE */
+
+#ifdef COND_VAR
+	pthread_mutex_destroy(&b.insert_mutex);
+	pthread_mutex_destroy(&b.remove_mutex);
+	pthread_mutex_destroy(&b.insert_mutex);
+#endif /* COND_VAR */
 
 	return 0;	
 }
