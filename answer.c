@@ -224,13 +224,13 @@ int buffer_insert(Buffer_t* b, char* insertBuf, int totalInsertSize) {
 	// insert in chunks
     while (remainingSize > 0) {
 		// mutex for cond var
-        pthread_mutex_lock(&b->insert_mutex);
+        pthread_mutex_lock(&b->mutex);
         
         int insertSize = MIN(remainingSize, CHUNK_SIZE);
 
 		// wait for atleast insertSize empty spots
         while (get_buffer_empty_slots(b) < insertSize) {
-			pthread_cond_wait(&b->not_full, &b->insert_mutex);
+			pthread_cond_wait(&b->empty, &b->mutex);
         }
 
 		// insert data into buffer, update count in char map (checking correctness)
@@ -242,8 +242,8 @@ int buffer_insert(Buffer_t* b, char* insertBuf, int totalInsertSize) {
         }
 
 		// wake up next thread waiting to insert - there are atleast insertSize full spots now
-        pthread_cond_signal(&b->not_empty);
-        pthread_mutex_unlock(&b->insert_mutex);
+        pthread_cond_signal(&b->full);
+        pthread_mutex_unlock(&b->mutex);
         
 		// update remaining bytes left to remove
         remainingSize -= insertSize;
@@ -261,13 +261,13 @@ int buffer_remove(Buffer_t* b, char* removeBuf, int totalRemoveSize) {
     int remainingSize = totalRemoveSize;
     
     while (remainingSize > 0) {
-        pthread_mutex_lock(&b->remove_mutex);
+        pthread_mutex_lock(&b->mutex);
         
         int removeSize = MIN(remainingSize, CHUNK_SIZE);
 
 		// wait for atleast removeSize full spots
         while (get_buffer_full_slots(b) < removeSize) {
-			pthread_cond_wait(&b->not_empty, &b->remove_mutex);
+			pthread_cond_wait(&b->full, &b->mutex);
         }
 
 		// remove data from buffer, update count in char map (checking correctness)
@@ -279,8 +279,8 @@ int buffer_remove(Buffer_t* b, char* removeBuf, int totalRemoveSize) {
         }
         
 		// wake up a waiting thread - there are atleast removeSize empty spots now
-        pthread_cond_signal(&b->not_full);
-        pthread_mutex_unlock(&b->remove_mutex);
+        pthread_cond_signal(&b->empty);
+        pthread_mutex_unlock(&b->mutex);
         
         remainingSize -= removeSize;
     }
@@ -406,9 +406,9 @@ int main(int argc, char **argv) {
 #endif /* SEMAPHORE */
 
 #ifdef COND_VAR
-	pthread_mutex_init(&b.insert_mutex, NULL);
-	pthread_mutex_init(&b.remove_mutex, NULL);
-	pthread_mutex_init(&b.insert_mutex, NULL);
+	pthread_mutex_init(&b.mutex, NULL);
+	pthread_cond_init(&b.empty, NULL);
+    pthread_cond_init(&b.full, NULL);
 #endif /* COND_VAR */
 
 	pthread_t reader_thids[NUM_READERS];
@@ -464,9 +464,9 @@ int main(int argc, char **argv) {
 #endif /* SEMAPHORE */
 
 #ifdef COND_VAR
-	pthread_mutex_destroy(&b.insert_mutex);
-	pthread_mutex_destroy(&b.remove_mutex);
-	pthread_mutex_destroy(&b.insert_mutex);
+	pthread_mutex_destroy(&b.mutex);
+	pthread_cond_destroy(&b.empty);
+	pthread_cond_destroy(&b.full);
 #endif /* COND_VAR */
 
 	return 0;	

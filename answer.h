@@ -27,7 +27,7 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // num of readers and writers
-#define NUM_WRITERS             20
+#define NUM_WRITERS             40
 #define NUM_READERS             35
 
 // amount of bytes readers will try to read at a time
@@ -77,10 +77,8 @@ typedef struct Buffer {
 
 #ifdef COND_VAR
     pthread_mutex_t mutex;
-    pthread_mutex_t insert_mutex;
-    pthread_mutex_t remove_mutex;
-    pthread_cond_t not_full;
-    pthread_cond_t not_empty;
+    pthread_cond_t  empty;
+    pthread_cond_t  full;
 #endif /* COND_VAR */
 
 } Buffer_t;
